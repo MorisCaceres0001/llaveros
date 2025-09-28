@@ -1,0 +1,47 @@
+Objetivo: Crear un sitio web responsivo que funcione perfectamente en dispositivos móviles y PC. Tecnología principal: React para el frontend y MySQL como base de datos. Propósito: Plataforma de venta, cuyo foco principal sea la personalización de llaveros.
+
+Funcionalidades clave:
+
+Página principal: El apartado de personalización de llaveros debe ser el elemento central.
+
+Subida de imagen: El usuario podrá subir una imagen desde su dispositivo.
+
+Opciones de forma del llavero:
+
+Redondo
+
+Cuadrado
+
+Forma recortada siguiendo la silueta de la imagen (recorte personalizado).
+
+Previsualización en tiempo real: Mostrar cómo se vería el llavero según forma seleccionada.
+
+Selección de colores: Paleta de colores pasteles y diseño colorido, orientado a un producto atractivo y llamativo para venta.
+
+Carrito de compras y pago en línea.
+
+Panel de administración: Para gestionar pedidos, imágenes y configuraciones.
+
+Diseño y UX:
+
+Estética moderna, alegre y enfocada en la venta de productos personalizados.
+
+Colores pasteles combinados con elementos vivos que resalten el producto.
+
+Diseño responsive usando CSS Flexbox o Grid.
+
+Base de datos (MySQL):
+
+Tabla para usuarios (opcional si hay registro).
+
+Tabla para pedidos, con imagen del llavero, forma seleccionada, colores, fecha y estado.
+
+Tabla para catálogo de productos y precios.
+
+Requisitos adicionales:
+
+Código limpio y bien comentado.
+
+Seguridad en la subida de imágenes (filtros de formato, tamaño, etc.).
+
+Optimización para carga rápida en móvil.
