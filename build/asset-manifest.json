@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/llaveros/static/css/main.7b3cbcce.css",
+    "main.js": "/llaveros/static/js/main.fec09ad1.js",
+    "index.html": "/llaveros/index.html",
+    "main.7b3cbcce.css.map": "/llaveros/static/css/main.7b3cbcce.css.map",
+    "main.fec09ad1.js.map": "/llaveros/static/js/main.fec09ad1.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.7b3cbcce.css",
+    "static/js/main.fec09ad1.js"
+  ]
+}
