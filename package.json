@@ -2,7 +2,7 @@
   "name": "keychain-studio",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://moriscaceres0001.github.io/llaveros",
+  "homepage": "https://moriscaceres0001.github.io/llaveros/",
   "dependencies": {
     "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/react": "^13.3.0",
