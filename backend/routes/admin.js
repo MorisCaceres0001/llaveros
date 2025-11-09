@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs'); // ⬅️ CAMBIAR AQUÍ: bcryptjs en lugar de bcrypt
+const bcrypt = require('bcryptjs');
 const { verifyToken } = require('../middleware/authMiddleware');
 require('dotenv').config();
 
@@ -12,12 +12,12 @@ require('dotenv').config();
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
-  console.log('🔐 Intento de login:', username); // ⬅️ Log para debug
+  console.log('🔐 Intento de login:', username);
 
   try {
     const [rows] = await pool.query('SELECT * FROM admins WHERE username = ? AND is_active = TRUE', [username]);
 
-    console.log('📊 Admins encontrados:', rows.length); // ⬅️ Log
+    console.log('📊 Admins encontrados:', rows.length);
 
     if (rows.length === 0) {
       console.log('❌ Usuario no encontrado');
@@ -25,10 +25,10 @@ router.post('/login', async (req, res) => {
     }
 
     const admin = rows[0];
-    console.log('👤 Admin:', admin.username, '| Email:', admin.email); // ⬅️ Log
+    console.log('👤 Admin:', admin.username, '| Email:', admin.email);
 
     const validPassword = await bcrypt.compare(password, admin.password);
-    console.log('🔑 Password válida:', validPassword); // ⬅️ Log
+    console.log('🔑 Password válida:', validPassword);
 
     if (!validPassword) {
       console.log('❌ Contraseña incorrecta');
@@ -43,7 +43,7 @@ router.post('/login', async (req, res) => {
 
     await pool.query('UPDATE admins SET last_login = NOW() WHERE id = ?', [admin.id]);
 
-    console.log('✅ Login exitoso para:', admin.username); // ⬅️ Log
+    console.log('✅ Login exitoso para:', admin.username);
 
     res.json({
       success: true,
@@ -69,22 +69,34 @@ router.get('/stats', verifyToken, async (req, res) => {
   try {
     console.log('📊 Obteniendo estadísticas...');
 
-    const [[stats]] = await pool.query(`
+    // ✅ CORRECCIÓN: Usar [rows] en lugar de [[stats]]
+    const [rows] = await pool.query(`
       SELECT 
-        (SELECT COUNT(*) FROM orders) as total_orders,
-        (SELECT IFNULL(SUM(total_amount), 0) FROM orders WHERE payment_status = 'paid') as total_revenue,
-        (SELECT COUNT(*) FROM products WHERE is_active = TRUE) as total_products,
-        (SELECT COUNT(*) FROM customers) as total_customers,
-        (SELECT COUNT(*) FROM orders WHERE order_status = 'pending') as pending_orders,
-        (SELECT COUNT(*) FROM orders WHERE order_status = 'processing') as processing_orders,
-        (SELECT COUNT(*) FROM orders WHERE order_status = 'delivered') as delivered_orders
+        COUNT(DISTINCT o.id) as total_orders,
+        IFNULL(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_amount ELSE 0 END), 0) as total_income,
+        COUNT(DISTINCT c.id) as customers_count,
+        SUM(CASE WHEN o.order_status = 'delivered' THEN 1 ELSE 0 END) as delivered_orders,
+        SUM(CASE WHEN o.order_status = 'pending' THEN 1 ELSE 0 END) as pending_orders,
+        SUM(CASE WHEN o.order_status = 'processing' THEN 1 ELSE 0 END) as processing_orders
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
     `);
 
+    // ✅ CORRECCIÓN: Extraer correctamente el primer resultado
+    const stats = rows[0];
+    
     console.log('✅ Estadísticas obtenidas:', stats);
 
     res.json({
       success: true,
-      stats
+      stats: {
+        total_orders: stats.total_orders || 0,
+        total_income: parseFloat(stats.total_income) || 0,
+        customers_count: stats.customers_count || 0,
+        delivered_orders: stats.delivered_orders || 0,
+        pending_orders: stats.pending_orders || 0,
+        processing_orders: stats.processing_orders || 0
+      }
     });
   } catch (err) {
     console.error('💥 Error obteniendo estadísticas:', err);
