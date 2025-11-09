@@ -1,5 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShoppingCart, Upload, Palette, Eye, Plus, Minus, Star, Menu, X } from 'lucide-react';
+import { ShoppingCart, Upload, Palette, Plus, Minus, Star, Menu, X, AlertCircle } from 'lucide-react';
+import CheckoutForm from './CheckoutForm';
+import OrderConfirmation from './OrderConfirmation';
+import StripeCheckout from './StripeCheckout';
+import { orderService } from '../services/orderService';
+import { productService } from '../services/productService';
+import { paymentService } from '../services/paymentService';
 
 const KeychainCustomizer = () => {
   // Estados principales
@@ -9,8 +15,14 @@ const KeychainCustomizer = () => {
   const [quantity, setQuantity] = useState(1);
   const [cartItems, setCartItems] = useState([]);
   const [showCart, setShowCart] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [orderNumber, setOrderNumber] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentView, setCurrentView] = useState('customizer');
+  const [galleryProducts, setGalleryProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
 
   // Estados para el swipe
@@ -20,16 +32,8 @@ const KeychainCustomizer = () => {
 
   // Paleta de colores pasteles
   const colors = [
-    '#FFB6C1', // Rosa pastel
-    '#E6E6FA', // Lavanda
-    '#F0E68C', // Amarillo pastel
-    '#98FB98', // Verde pastel
-    '#87CEEB', // Azul cielo
-    '#DDA0DD', // Ciruela pastel
-    '#F5DEB3', // Trigo
-    '#FFA07A', // Salmón claro
-    '#20B2AA', // Verde azulado
-    '#FFE4E1'  // Rosa brumoso
+    '#FFB6C1', '#E6E6FA', '#F0E68C', '#98FB98', '#87CEEB',
+    '#DDA0DD', '#F5DEB3', '#FFA07A', '#20B2AA', '#FFE4E1'
   ];
 
   // Formas disponibles
@@ -38,6 +42,22 @@ const KeychainCustomizer = () => {
     { id: 'square', name: 'Cuadrado', price: 2 },
     { id: 'custom', name: 'Recorte Personalizado', price: 3 }
   ];
+
+  // Cargar productos de la galería
+  useEffect(() => {
+    loadGalleryProducts();
+  }, []);
+
+  const loadGalleryProducts = async () => {
+    try {
+      const response = await productService.getAllProducts();
+      if (response.success) {
+        setGalleryProducts(response.products);
+      }
+    } catch (error) {
+      console.error('Error cargando galería:', error);
+    }
+  };
 
   // Función para cambiar forma por índice
   const changeShapeByIndex = (direction) => {
@@ -58,7 +78,7 @@ const KeychainCustomizer = () => {
     }, 300);
   };
 
-  // Detectar dirección del swipe
+  // Detectar swipe
   const minSwipeDistance = 50;
 
   const onTouchStart = (e) => {
@@ -88,23 +108,23 @@ const KeychainCustomizer = () => {
   const handleImageUpload = (event) => {
     const file = event.target.files[0];
     if (file) {
-      // Validación de seguridad
       const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-      const maxSize = 5 * 1024 * 1024; // 5MB
+      const maxSize = 5 * 1024 * 1024;
 
       if (!validTypes.includes(file.type)) {
-        alert('Por favor selecciona una imagen válida (JPEG, PNG o GIF)');
+        setError('Por favor selecciona una imagen válida (JPEG, PNG o GIF)');
         return;
       }
 
       if (file.size > maxSize) {
-        alert('La imagen es demasiado grande. Máximo 5MB permitido.');
+        setError('La imagen es demasiado grande. Máximo 5MB permitido.');
         return;
       }
 
       const reader = new FileReader();
       reader.onload = (e) => {
         setSelectedImage(e.target.result);
+        setError(null);
       };
       reader.readAsDataURL(file);
     }
@@ -113,7 +133,7 @@ const KeychainCustomizer = () => {
   // Agregar al carrito
   const addToCart = () => {
     if (!selectedImage) {
-      alert('Por favor selecciona una imagen primero');
+      setError('Por favor selecciona una imagen primero');
       return;
     }
 
@@ -130,11 +150,68 @@ const KeychainCustomizer = () => {
     setCartItems([...cartItems, item]);
     setShowCart(true);
     
-    // Reset del formulario
+    // Reset
     setSelectedImage(null);
     setQuantity(1);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+    setError(null);
+  };
+
+  // Agregar producto de galería al carrito
+  const addGalleryProductToCart = (product) => {
+    const item = {
+      id: Date.now(),
+      image: product.image_url,
+      shape: shapes.find(s => s.id === product.shape),
+      color: '#FFB6C1',
+      quantity: 1,
+      total: product.base_price
+    };
+
+    setCartItems([...cartItems, item]);
+    setShowCart(true);
+  };
+
+  // Proceder al checkout
+  const proceedToCheckout = () => {
+    if (cartItems.length === 0) {
+      setError('Tu carrito está vacío');
+      return;
+    }
+    setShowCart(false);
+    setShowCheckout(true);
+  };
+
+  // Procesar pedido
+  const handleCheckoutSubmit = async (customerData) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const total = cartItems.reduce((sum, item) => sum + item.total, 0);
+
+      const orderData = {
+        customer: customerData,
+        items: cartItems,
+        totalAmount: total,
+        paymentMethod: 'pending'
+      };
+
+      const response = await orderService.createOrder(orderData);
+
+      if (response.success) {
+        setOrderNumber(response.orderNumber);
+        setShowCheckout(false);
+        setShowConfirmation(true);
+        setCartItems([]);
+      }
+    } catch (error) {
+      console.error('Error creando pedido:', error);
+      setError(error.message || 'Error al procesar el pedido');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -221,8 +298,11 @@ const KeychainCustomizer = () => {
                     <span className="text-xl font-bold text-gray-800">Total:</span>
                     <span className="text-2xl font-bold text-purple-600">${total.toFixed(2)}</span>
                   </div>
-                  <button className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-6 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg">
-                    Proceder al Pago
+                  <button 
+                    onClick={proceedToCheckout}
+                    className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-6 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg"
+                  >
+                    Proceder al Checkout
                   </button>
                 </div>
               </>
@@ -334,6 +414,22 @@ const KeychainCustomizer = () => {
         )}
       </header>
 
+      {/* Alerta de errores */}
+      {error && (
+        <div className="container mx-auto px-4 mt-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
+            <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
+            <div className="flex-1">
+              <p className="text-red-700 font-medium">Error</p>
+              <p className="text-red-600 text-sm">{error}</p>
+            </div>
+            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Contenido principal */}
       <main className="container mx-auto px-4 py-8">
         {currentView === 'customizer' ? (
@@ -348,7 +444,7 @@ const KeychainCustomizer = () => {
               </p>
             </div>
 
-            {/* Bloque Unificado de Personalización y Vista Previa */}
+            {/* Bloque Unificado */}
             <div className="max-w-2xl mx-auto">
               <div className="bg-white rounded-3xl shadow-xl p-8">
                 <h3 className="text-2xl font-bold text-gray-800 mb-8 text-center flex items-center justify-center">
@@ -356,10 +452,9 @@ const KeychainCustomizer = () => {
                   Personaliza tu Llavero
                 </h3>
 
-                {/* Área de imagen / Vista previa unificada */}
+                {/* Área de imagen / Vista previa */}
                 <div className="mb-8">
                   {!selectedImage ? (
-                    /* Área de subida de imagen */
                     <div className="border-2 border-dashed border-purple-300 rounded-3xl p-12 text-center hover:border-purple-400 transition-colors duration-300 bg-gradient-to-br from-purple-50 to-pink-50">
                       <input
                         type="file"
@@ -383,11 +478,10 @@ const KeychainCustomizer = () => {
                       </label>
                     </div>
                   ) : (
-                    /* Vista previa interactiva con swipe */
                     <div className="text-center">
-                      {/* Indicador de formas */}
+                      {/* Indicadores */}
                       <div className="flex justify-center space-x-2 mb-6">
-                        {shapes.map((shape, index) => (
+                        {shapes.map((shape) => (
                           <div
                             key={shape.id}
                             className={`w-3 h-3 rounded-full transition-all duration-300 ${
@@ -405,7 +499,6 @@ const KeychainCustomizer = () => {
                         onTouchEnd={onTouchEnd}
                       >
                         <div style={getKeychainStyle()}>
-                          {/* Anilla del llavero */}
                           <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
                             <div className="w-8 h-8 bg-gradient-to-r from-yellow-300 to-yellow-500 rounded-full border-3 border-yellow-600 shadow-lg">
                               <div className="w-3 h-3 bg-yellow-600 rounded-full mx-auto mt-2.5"></div>
@@ -413,7 +506,7 @@ const KeychainCustomizer = () => {
                           </div>
                         </div>
 
-                        {/* Botones de navegación para desktop */}
+                        {/* Botones desktop */}
                         <button 
                           onClick={() => changeShapeByIndex('prev')}
                           className="hidden md:block absolute left-0 top-1/2 -translate-y-1/2 -translate-x-16 bg-white shadow-lg rounded-full p-3 hover:bg-gray-50 transition-all duration-300 opacity-70 hover:opacity-100"
@@ -433,7 +526,7 @@ const KeychainCustomizer = () => {
                         </button>
                       </div>
 
-                      {/* Información de la forma actual */}
+                      {/* Info forma */}
                       <div className="text-center mb-4">
                         <p className="text-sm text-purple-600 mb-1">
                           <span className="md:hidden">Desliza para cambiar forma</span>
@@ -444,7 +537,6 @@ const KeychainCustomizer = () => {
                         </p>
                       </div>
 
-                      {/* Botón para cambiar imagen */}
                       <button 
                         onClick={() => {
                           setSelectedImage(null);
@@ -460,7 +552,7 @@ const KeychainCustomizer = () => {
                   )}
                 </div>
 
-                {/* Seleccionar color */}
+                {/* Selección de color */}
                 {selectedImage && (
                   <div className="mb-8">
                     <label className="block text-lg font-semibold text-gray-700 mb-4 text-center">
@@ -511,7 +603,7 @@ const KeychainCustomizer = () => {
                   </div>
                 )}
 
-                {/* Resumen del producto */}
+                {/* Resumen */}
                 {selectedImage && (
                   <div className="mb-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl border border-green-200">
                     <h4 className="font-bold text-gray-800 mb-3 text-center text-lg">Resumen del producto</h4>
@@ -536,7 +628,7 @@ const KeychainCustomizer = () => {
                   </div>
                 )}
 
-                {/* Botón agregar al carrito */}
+                {/* Botón agregar */}
                 {selectedImage && (
                   <button
                     onClick={addToCart}
@@ -551,50 +643,54 @@ const KeychainCustomizer = () => {
           </div>
         ) : (
           /* Vista de galería */
-        <div className="max-w-4xl mx-auto text-center">
-  <h2 className="text-4xl font-bold text-gray-800 mb-8">
-    Galería de Inspiración
-  </h2>
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-4xl font-bold text-gray-800 mb-8 text-center">
+              Galería de Inspiración
+            </h2>
 
-  <div className="grid md:grid-cols-3 gap-6 mb-8">
-    {[
-      { id: 1, img: "img/img1 (1).jpg", precio: "$5" },
-      { id: 1, img: "img/img1 (3).jpg", precio: "$5" },
-      { id: 1, img: "img/img1 (4).jpg", precio: "$5" },
-      { id: 1, img: "img/img1 (6).jpg", precio: "$5" },
-      { id: 1, img: "img/img1 (7).jpg", precio: "$5" },
-      { id: 1, img: "img/img1 (8).jpg", precio: "$5" }
+            {galleryProducts.length > 0 ? (
+              <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+                {galleryProducts.map((product) => (
+                  <div
+                    key={product.id}
+                    className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
+                  >
+                    <div className="h-48 w-full">
+                      <img
+                        src={product.image_url}
+                        alt={`Producto ${product.id}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="p-4">
+                      <p className="text-gray-600 mb-2">{shapes.find(s => s.id === product.shape)?.name}</p>
+                      <p className="font-bold text-purple-600 mb-3">${product.base_price}</p>
+                      <button
+                        onClick={() => addGalleryProductToCart(product)}
+                        className="w-full bg-purple-500 hover:bg-purple-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-300"
+                      >
+                        Agregar al Carrito
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-lg">No hay productos en la galería aún</p>
+                <p className="text-gray-400 text-sm mt-2">¡Sé el primero en crear un diseño!</p>
+              </div>
+            )}
 
-    ].map((item) => (
-      <div
-        key={item.id}
-        className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
-      >
-        {/* ajustes del nombres y imagenes */}
-        <div className="h-48 w-full">
-          <img
-            src={item.img}
-            alt={item.nombre}
-            className="w-full h-full object-contain"
-          />
-          <span className="text-gray-500 font-medium">{item.nombre}</span>
-        </div>
-        <div className="p-4">
-          <p className="text-gray-600">Diseño personalizado</p>
-          <p className="font-bold text-purple-600">{item.precio}</p>
-        </div>
-      </div>
-    ))}
-  </div>
-
-  <button
-    onClick={() => setCurrentView("customizer")}
-    className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-8 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg"
-  >
-    ¡Crea el tuyo ahora!
-  </button>
-</div>
-
+            <div className="text-center">
+              <button 
+                onClick={() => setCurrentView('customizer')}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-8 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg"
+              >
+                ¡Crea el tuyo ahora!
+              </button>
+            </div>
+          </div>
         )}
       </main>
 
@@ -631,8 +727,25 @@ const KeychainCustomizer = () => {
         </div>
       </footer>
 
-      {/* Modal del carrito */}
+      {/* Modales */}
       {showCart && <CartComponent />}
+      {showCheckout && (
+        <CheckoutForm
+          cartItems={cartItems}
+          onClose={() => setShowCheckout(false)}
+          onSubmit={handleCheckoutSubmit}
+          isLoading={isLoading}
+        />
+      )}
+      {showConfirmation && (
+        <OrderConfirmation
+          orderNumber={orderNumber}
+          onClose={() => {
+            setShowConfirmation(false);
+            setCurrentView('customizer');
+          }}
+        />
+      )}
     </div>
   );
 };
