@@ -17,21 +17,21 @@ router.post('/login', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM admins WHERE username = ? AND is_active = TRUE', [username]);
 
-    console.log('📊 Admins encontrados:', rows.length);
+    console.log('📊 Admins encontrados:', Array.isArray(rows) ? rows.length : 'no rows');
 
-    if (rows.length === 0) {
-      console.log('❌ Usuario no encontrado');
+    if (!rows || rows.length === 0) {
+      console.log('❌ Usuario no encontrado:', username);
       return res.status(401).json({ success: false, message: 'Usuario no encontrado' });
     }
 
     const admin = rows[0];
-    console.log('👤 Admin:', admin.username, '| Email:', admin.email);
+    console.log('👤 Admin record fetched:', { id: admin.id, username: admin.username, email: admin.email });
 
     const validPassword = await bcrypt.compare(password, admin.password);
-    console.log('🔑 Password válida:', validPassword);
+    console.log('🔑 Password válida:', validPassword === true);
 
     if (!validPassword) {
-      console.log('❌ Contraseña incorrecta');
+      console.log('❌ Contraseña incorrecta para usuario:', username);
       return res.status(401).json({ success: false, message: 'Contraseña incorrecta' });
     }
 
@@ -57,8 +57,8 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('💥 Error en login:', err);
-    res.status(500).json({ success: false, message: 'Error en el servidor' });
+    console.error('💥 Error en login:', err.message || err);
+    res.status(500).json({ success: false, message: err.message || 'Error en el servidor' });
   }
 });
 
@@ -114,7 +114,12 @@ router.get('/orders', verifyToken, async (req, res) => {
     
     let query = `
       SELECT 
-        o.*,
+        o.id,
+        o.order_number,
+        o.total_amount as total,
+        o.payment_status,
+        o.order_status as status,
+        o.created_at,
         c.name as customer_name,
         c.whatsapp,
         c.address,
@@ -182,6 +187,26 @@ router.put('/orders/:orderId/status', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('Error actualizando estado:', err);
     res.status(500).json({ success: false, message: 'Error actualizando estado' });
+  }
+});
+
+// =========================
+// 💳 MARCAR PEDIDO COMO PAGADO (útil para pruebas)
+// =========================
+router.post('/orders/:orderId/mark-paid', verifyToken, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { paymentId } = req.body;
+
+    await pool.query(
+      'UPDATE orders SET payment_status = ?, payment_id = ?, updated_at = NOW() WHERE id = ?',
+      ['paid', paymentId || null, orderId]
+    );
+
+    res.json({ success: true, message: 'Pedido marcado como pagado' });
+  } catch (err) {
+    console.error('Error marcando pedido como pagado:', err);
+    res.status(500).json({ success: false, message: 'Error marcando pedido como pagado' });
   }
 });
 

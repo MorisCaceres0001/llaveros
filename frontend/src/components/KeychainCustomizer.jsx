@@ -7,6 +7,9 @@ import { orderService } from '../services/orderService';
 import { productService } from '../services/productService';
 import { paymentService } from '../services/paymentService';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const BACKEND_ORIGIN = API_URL.replace(/\/api\/?$/, '');
+
 const KeychainCustomizer = () => {
   // Estados principales
   const [selectedImage, setSelectedImage] = useState(null);
@@ -161,13 +164,15 @@ const KeychainCustomizer = () => {
 
   // Agregar producto de galería al carrito
   const addGalleryProductToCart = (product) => {
+    const basePrice = Number(product.base_price) || 0;
+    const foundShape = shapes.find(s => s.id === product.shape) || { id: product.shape, name: product.shape, price: basePrice };
     const item = {
       id: Date.now(),
       image: product.image_url,
-      shape: shapes.find(s => s.id === product.shape),
+      shape: foundShape,
       color: '#FFB6C1',
       quantity: 1,
-      total: product.base_price
+      total: Number(basePrice)
     };
 
     setCartItems([...cartItems, item]);
@@ -196,7 +201,9 @@ const KeychainCustomizer = () => {
         customer: customerData,
         items: cartItems,
         totalAmount: total,
-        paymentMethod: 'pending'
+        paymentMethod: 'pending',
+        // Para entornos de prueba podemos marcar como pagado mediante REACT_APP_TEST_PAYMENTS=true
+        paymentStatus: process.env.REACT_APP_TEST_PAYMENTS === 'true' ? 'paid' : 'pending'
       };
 
       const response = await orderService.createOrder(orderData);
@@ -209,7 +216,9 @@ const KeychainCustomizer = () => {
       }
     } catch (error) {
       console.error('Error creando pedido:', error);
-      setError(error.message || 'Error al procesar el pedido');
+      // Mejor manejo de errores: el backend puede devolver un objeto con { message, error }
+      const msg = (error && (error.message || error.error || error.data || JSON.stringify(error))) || 'Error al procesar el pedido';
+      setError(typeof msg === 'string' ? msg : 'Error al procesar el pedido');
     } finally {
       setIsLoading(false);
     }
@@ -252,7 +261,7 @@ const KeychainCustomizer = () => {
 
   // Componente del carrito
   const CartComponent = () => {
-    const total = cartItems.reduce((sum, item) => sum + item.total, 0);
+    const total = cartItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -287,16 +296,16 @@ const KeychainCustomizer = () => {
                       <div className="flex-1">
                         <p className="font-semibold text-gray-800">{item.shape.name}</p>
                         <p className="text-sm text-gray-600">Cantidad: {item.quantity}</p>
-                        <p className="font-bold text-purple-600">${item.total.toFixed(2)}</p>
+                        <p className="font-bold text-purple-600">${(Number(item.total) || 0).toFixed(2)}</p>
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="border-t border-gray-200 pt-4">
-                  <div className="flex justify-between items-center mb-4">
+                <div className="flex justify-between items-center mb-4">
                     <span className="text-xl font-bold text-gray-800">Total:</span>
-                    <span className="text-2xl font-bold text-purple-600">${total.toFixed(2)}</span>
+                    <span className="text-2xl font-bold text-purple-600">${(Number(total) || 0).toFixed(2)}</span>
                   </div>
                   <button 
                     onClick={proceedToCheckout}
@@ -656,11 +665,18 @@ const KeychainCustomizer = () => {
                     className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
                   >
                     <div className="h-48 w-full">
-                      <img
-                        src={product.image_url}
-                        alt={`Producto ${product.id}`}
-                        className="w-full h-full object-cover"
-                      />
+                      {(() => {
+                        const url = product.image_url || '';
+                        const imgSrc = url.startsWith('http') ? url : (url.startsWith('/') ? `${BACKEND_ORIGIN}${url}` : url);
+                        return (
+                          <img
+                            src={imgSrc}
+                            alt={`Producto ${product.id}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.currentTarget.style.opacity = 0.5; }}
+                          />
+                        );
+                      })()}
                     </div>
                     <div className="p-4">
                       <p className="text-gray-600 mb-2">{shapes.find(s => s.id === product.shape)?.name}</p>

@@ -6,7 +6,7 @@ import './App.css';
 
 function App() {
   return (
-    <Router basename="/llaveros">
+    <Router basename={process.env.PUBLIC_URL || '/'}>
       <Routes>
         <Route path="/" element={<KeychainCustomizer />} />
         <Route path="/admin" element={<AdminDashboard />} />

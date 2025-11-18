@@ -6,6 +6,7 @@ import {
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const BACKEND_ORIGIN = API_URL.replace(/\/api\/?$/, '');
 
 const AdminDashboard = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -98,10 +99,13 @@ const AdminDashboard = () => {
     try {
       setIsLoading(true);
       
-      // Cargar estadísticas
+      // Cargar estadísticas (validar que la respuesta tenga estructura esperada)
       const statsResponse = await apiRequest.get('/admin/stats');
-      if (statsResponse.data.success) {
-        setStats(statsResponse.data.stats);
+      const statsData = statsResponse?.data;
+      if (statsData?.success) {
+        setStats(statsData.stats ?? null);
+      } else {
+        setStats(null);
       }
 
       // Cargar pedidos
@@ -246,25 +250,29 @@ const AdminDashboard = () => {
               <div>
                 <h3 className="font-semibold text-gray-800 mb-3">Productos</h3>
                 <div className="space-y-3">
-                  {selectedOrder.items && selectedOrder.items.map((item, index) => (
-                    <div key={index} className="bg-gray-50 rounded-xl p-4 flex items-center space-x-4">
-                      {item.image_url && (
-                        <div 
-                          className="w-16 h-16 rounded-lg border-2 border-white shadow-md"
-                          style={{
-                            backgroundImage: `url(${item.image_url})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center'
-                          }}
-                        />
-                      )}
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-800">{item.shape_name || 'Llavero'}</p>
-                        <p className="text-sm text-gray-600">Cantidad: {item.quantity}</p>
+                  {selectedOrder.items && selectedOrder.items.map((item, index) => {
+                    const img = item.image_url || '';
+                    const imageSrc = img.startsWith('http') ? img : (img.startsWith('/') ? `${BACKEND_ORIGIN}${img}` : img);
+                    return (
+                      <div key={index} className="bg-gray-50 rounded-xl p-4 flex items-center space-x-4">
+                        {item.image_url && (
+                          <div 
+                            className="w-16 h-16 rounded-lg border-2 border-white shadow-md"
+                            style={{
+                              backgroundImage: `url(${imageSrc})`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center'
+                            }}
+                          />
+                        )}
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-800">{item.shape_name || 'Llavero'}</p>
+                          <p className="text-sm text-gray-600">Cantidad: {item.quantity}</p>
+                        </div>
+                        <p className="font-bold text-purple-600">${item.subtotal}</p>
                       </div>
-                      <p className="font-bold text-purple-600">${item.subtotal}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
